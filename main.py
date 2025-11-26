@@ -101,6 +101,7 @@ def main():
     init_session_state()
     
     st.title("🎓 Class 11/12 Quiz Master")
+    st.markdown("Created by Dwarika Koharr")
     st.caption("Physics | Chemistry | Mathematics | Biology")
     
     # Sidebar
