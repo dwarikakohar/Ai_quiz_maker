@@ -110,7 +110,7 @@ def main():
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<p class="big-font">Creator Dwarika Kohar</p>', unsafe_allow_html=True)
+    st.markdown('<p class="big-font">Creator Dwarika Kohar</p>', unsafe_allow_html=True)
     st.caption("Physics | Chemistry | Mathematics | Biology")
     
     # Sidebar
