@@ -104,7 +104,7 @@ def main():
     st.markdown("""
 <style>
 .big-font {
-    font-size: 400px !important;
+    font-size: 300px !important;
     font-weight: bold;
 }
 </style>
