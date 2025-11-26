@@ -16,11 +16,15 @@ def init_session_state():
     if 'user_answers' not in st.session_state:
         st.session_state.user_answers = {}
     if 'score' not in st.session_state:
-        st.session_state.score = None
+        st.session_state.score = 0
     if 'submitted' not in st.session_state:
         st.session_state.submitted = False
     if 'api_key' not in st.session_state:
         st.session_state.api_key = ""
+    if 'current_question' not in st.session_state:
+        st.session_state.current_question = 0
+    if 'checked_answers' not in st.session_state:
+        st.session_state.checked_answers = {}
 
 def get_available_models(api_key):
     try:
@@ -33,15 +37,16 @@ def get_available_models(api_key):
     except Exception as e:
         return []
 
-def generate_quiz(api_key, model_name, subject, topic, difficulty):
+def generate_quiz(api_key, model_name, subject, topic, difficulty, num_questions, explanation_depth):
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel(model_name)
         
         prompt = f"""
         Act as an expert {subject} teacher for Class 11 and 12 students.
-        Create a quiz about "{topic}" with 5 conceptual and numerical questions.
+        Create a quiz about "{topic}" with {num_questions} conceptual and numerical questions.
         Difficulty level: {difficulty}.
+        Explanation Depth: {explanation_depth} (Provide explanations accordingly).
         
         For EACH question, you MUST provide Python code using matplotlib, seaborn, or pandas to visualize the concept or the solution (e.g., a graph of the function, a diagram, or a data plot).
         The python code should be self-contained, use 'fig, ax = plt.subplots()' (or sns functions that return an ax/fig) and NOT call plt.show(). It should just create the plot on 'ax' or 'fig'.
@@ -60,7 +65,7 @@ def generate_quiz(api_key, model_name, subject, topic, difficulty):
         Do not include any markdown formatting (like ```json), just the raw JSON string.
         """
         
-        with st.spinner("Generating quiz and visualizations..."):
+        with st.spinner(f"Generating {num_questions} questions... This might take a minute."):
             response = model.generate_content(prompt)
             text = response.text.strip()
             
@@ -121,9 +126,13 @@ def main():
         st.markdown("### Quiz Configuration")
         subject = st.selectbox("Subject", ["Physics", "Chemistry", "Mathematics", "Biology"])
         difficulty = st.select_slider("Difficulty", options=["Easy", "Medium", "Hard"])
+        
+        num_questions = st.slider("Number of Questions", min_value=1, max_value=25, value=5)
+        explanation_depth = st.select_slider("Explanation Depth", options=["Brief", "Standard", "Detailed"], value="Standard")
 
     if not st.session_state.api_key:
         st.info("Please enter your Gemini API Key in the sidebar to start.")
+        st.markdown("👉 **Don't have an API key?** [Get one here from Google AI Studio](https://aistudio.google.com/app/apikey)")
         return
 
     # Quiz Generation
@@ -133,65 +142,111 @@ def main():
             submitted = st.form_submit_button("Generate Quiz")
             
             if submitted and topic:
-                data = generate_quiz(st.session_state.api_key, model_name, subject, topic, difficulty)
+                data = generate_quiz(st.session_state.api_key, model_name, subject, topic, difficulty, num_questions, explanation_depth)
                 if data:
                     st.session_state.quiz_data = data
                     st.session_state.user_answers = {}
-                    st.session_state.score = None
+                    st.session_state.score = 0
                     st.session_state.submitted = False
+                    st.session_state.current_question = 0
+                    st.session_state.checked_answers = {}
                     st.rerun()
 
     # Quiz Display
     else:
-        st.subheader(f"Topic: {st.session_state.quiz_data[0].get('topic', 'Quiz')}")
+        q_idx = st.session_state.current_question
+        q_data = st.session_state.quiz_data[q_idx]
+        total_q = len(st.session_state.quiz_data)
         
-        with st.form("quiz_form"):
-            for i, q in enumerate(st.session_state.quiz_data):
-                st.markdown(f"### Q{i+1}: {q['question']}")
-                
-                # Layout: Options on left, Visualization on right (if available)
-                col1, col2 = st.columns([1, 1])
-                
-                with col1:
-                    sel = st.radio(
-                        "Select Answer:",
-                        q['options'],
-                        key=f"q_{i}",
-                        index=None,
-                        disabled=st.session_state.submitted
-                    )
-                    if sel:
-                        st.session_state.user_answers[i] = sel
-                
-                with col2:
-                    if q.get('visualization_code'):
-                        with st.expander("Show Concept Visualizer", expanded=True):
-                            fig = execute_viz_code(q['visualization_code'])
-                            if fig:
-                                st.pyplot(fig)
-                                plt.close(fig) # Clean up memory
-
-                if st.session_state.submitted:
-                    if st.session_state.user_answers.get(i) == q['answer']:
-                        st.success("✅ Correct")
-                    else:
-                        st.error(f"❌ Incorrect. Answer: {q['answer']}")
-                    st.info(f"**Explanation:** {q['explanation']}")
-                
-                st.divider()
+        st.subheader(f"Question {q_idx + 1} of {total_q}")
+        st.progress((q_idx + 1) / total_q)
+        
+        st.markdown(f"### {q_data['question']}")
+        
+        # Layout: Options on left, Visualization on right (if available)
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:
+            # Use a form for the current question to handle selection state better
+            # or just use radio with key based on index
             
-            if not st.session_state.submitted:
-                if st.form_submit_button("Submit Quiz"):
-                    st.session_state.submitted = True
-                    score = sum(1 for i, q in enumerate(st.session_state.quiz_data) 
-                              if st.session_state.user_answers.get(i) == q['answer'])
-                    st.session_state.score = score
+            # Check if this question has been answered/checked
+            is_checked = st.session_state.checked_answers.get(q_idx, False)
+            
+            # Get previous selection if exists
+            prev_selection = st.session_state.user_answers.get(q_idx, None)
+            
+            # We need to find the index of the previous selection in the options list
+            try:
+                idx = q_data['options'].index(prev_selection) if prev_selection else None
+            except ValueError:
+                idx = None
+
+            selection = st.radio(
+                "Select Answer:",
+                q_data['options'],
+                key=f"q_{q_idx}",
+                index=idx,
+                disabled=is_checked
+            )
+            
+            if selection:
+                st.session_state.user_answers[q_idx] = selection
+
+            if not is_checked:
+                if st.button("Check Answer"):
+                    if selection:
+                        st.session_state.checked_answers[q_idx] = True
+                        if selection == q_data['answer']:
+                            st.session_state.score += 1
+                        st.rerun()
+                    else:
+                        st.warning("Please select an answer first.")
+            else:
+                # Show feedback
+                if st.session_state.user_answers.get(q_idx) == q_data['answer']:
+                    st.success("✅ Correct!")
+                else:
+                    st.error(f"❌ Incorrect. Answer: {q_data['answer']}")
+                
+                with st.expander("Explanation", expanded=True):
+                    st.info(q_data['explanation'])
+
+        with col2:
+            if q_data.get('visualization_code'):
+                with st.expander("Show Concept Visualizer", expanded=True):
+                    fig = execute_viz_code(q_data['visualization_code'])
+                    if fig:
+                        st.pyplot(fig)
+                        plt.close(fig)
+
+        st.divider()
+        
+        # Navigation Buttons
+        c1, c2, c3 = st.columns([1, 2, 1])
+        
+        with c1:
+            if q_idx > 0:
+                if st.button("⬅️ Previous"):
+                    st.session_state.current_question -= 1
+                    st.rerun()
+        
+        with c3:
+            if q_idx < total_q - 1:
+                if st.button("Next ➡️"):
+                    st.session_state.current_question += 1
                     st.rerun()
             else:
-                st.write(f"### Final Score: {st.session_state.score} / {len(st.session_state.quiz_data)}")
-                if st.form_submit_button("Start New Quiz"):
-                    st.session_state.quiz_data = None
+                if st.button("Finish Quiz 🏆"):
+                    st.session_state.submitted = True
                     st.rerun()
+
+        if st.session_state.submitted:
+            st.balloons()
+            st.success(f"Quiz Completed! Final Score: {st.session_state.score} / {total_q}")
+            if st.button("Start New Quiz"):
+                st.session_state.quiz_data = None
+                st.rerun()
 
 if __name__ == "__main__":
     main()
