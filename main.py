@@ -101,7 +101,16 @@ def main():
     init_session_state()
     
     st.title("🎓 Class 11/12 Quiz Master")
-    st.markdown("Created by Dwarika Koharr")
+    st.markdown("""
+<style>
+.big-font {
+    font-size: 500px !important;
+    font-weight: bold;
+}
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown('<p class="big-font">Creator Dwarika Kohar</p>', unsafe_allow_html=True)
     st.caption("Physics | Chemistry | Mathematics | Biology")
     
     # Sidebar
