@@ -60,19 +60,18 @@ def generate_quiz(api_key, model_name, subject, topic, difficulty, num_questions
         - "visualization_code": Python code string to generate a matplotlib figure named 'fig'. Do not include markdown fences.
         
         Example of visualization_code:
-        "import numpy as np\\nimport matplotlib.pyplot as plt\\nimport seaborn as sns\\nfig, ax = plt.subplots()\\nx = np.linspace(0, 10, 100)\\ny = np.sin(x)\\nsns.lineplot(x=x, y=y, ax=ax)\\nax.set_title('Sine Wave')"
-        
+        "import numpy as np\nimport matplotlib.pyplot as plt\nimport seaborn as sns\nfig, ax = plt.subplots()\nx = np.linspace(0, 10, 100)\ny = np.sin(x)\nsns.lineplot(x=x, y=y, ax=ax)\nax.[...]\n        
         Do not include any markdown formatting (like ```json), just the raw JSON string.
         """
         
-        with st.spinner(f"Generating {num_questions} questions... This might take a minute."):
+        with st.spinner(f"Generating {num_questions} questions... This might take a minute."): 
             response = model.generate_content(prompt)
             text = response.text.strip()
             
             # Clean up markdown
             if text.startswith("```json"): text = text[7:]
-            if text.startswith("```"): text = text[3:]
-            if text.endswith("```"): text = text[:-3]
+            if text.startswith("```" ): text = text[3:]
+            if text.endswith("```" ): text = text[:-3]
             
             return json.loads(text)
             
@@ -110,8 +109,10 @@ def main():
 </style>
 """, unsafe_allow_html=True)
 
-    st.markdown('<p class="big-font">Creator Dwarika Kohar</p>', unsafe_allow_html=True)
-    st.caption("Physics | Chemistry | Mathematics | Biology")
+    # Hide creator name once API key is saved
+    if not st.session_state.api_key:
+        st.markdown('<p class="big-font">Creator Dwarika Kohar</p>', unsafe_allow_html=True)
+        st.caption("Physics | Chemistry | Mathematics | Biology")
     
     # Sidebar
     with st.sidebar:
